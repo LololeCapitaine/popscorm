@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import { formatBytes } from "@/lib/format";
 import { limitForPlan } from "@/lib/plans";
+import { Logo } from "@/components/logo";
 import { UploadModule } from "./upload-module";
 import { ModuleRow } from "./module-row";
 
@@ -36,7 +38,9 @@ export default async function DashboardPage() {
   return (
     <main className="flex flex-1 flex-col bg-zinc-50 font-sans dark:bg-black">
       <header className="flex items-center justify-between border-b border-black/10 px-6 py-4 dark:border-white/15">
-        <span className="text-lg font-bold tracking-tight">Popscorm</span>
+        <Link href="/" className="text-lg font-bold tracking-tight">
+          <Logo />
+        </Link>
         <div className="flex items-center gap-4 text-sm">
           <span className="hidden text-black/60 sm:inline dark:text-white/60">
             {user.email}
@@ -59,7 +63,7 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
               <div
-                className={`h-full rounded-full ${pct >= 100 ? "bg-red-500" : "bg-black dark:bg-white"}`}
+                className={`h-full rounded-full ${pct >= 100 ? "bg-red-500" : "bg-brand-600"}`}
                 style={{ width: `${pct}%` }}
               />
             </div>

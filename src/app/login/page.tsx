@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { signIn, signUp, signInWithGoogle } from "./actions";
+import { Logo } from "@/components/logo";
+import { GoogleIcon } from "@/components/google-icon";
 
 export default async function LoginPage(props: PageProps<"/login">) {
   const params = await props.searchParams;
@@ -9,16 +11,16 @@ export default async function LoginPage(props: PageProps<"/login">) {
     typeof params.redirect === "string" ? params.redirect : "/dashboard";
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 py-16 font-sans dark:bg-black">
+    <main className="flex min-h-dvh flex-1 flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-zinc-50 px-6 py-16 font-sans dark:from-zinc-950 dark:to-black">
       <div className="w-full max-w-sm">
         <Link
           href="/"
-          className="mb-8 block text-center text-xl font-bold tracking-tight"
+          className="mb-8 block text-center text-2xl font-bold tracking-tight"
         >
-          Popscorm
+          <Logo />
         </Link>
 
-        <div className="rounded-xl border border-black/10 bg-white p-6 shadow-sm dark:border-white/15 dark:bg-zinc-950">
+        <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm dark:border-white/15 dark:bg-zinc-950">
           <h1 className="text-lg font-semibold">Connexion</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
             Connecte-toi ou crée un compte pour héberger tes modules.
@@ -44,7 +46,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
                 name="email"
                 required
                 autoComplete="email"
-                className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
+                className="rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/20 dark:focus:border-brand-400 dark:focus:ring-brand-900/40"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
@@ -55,22 +57,22 @@ export default async function LoginPage(props: PageProps<"/login">) {
                 required
                 minLength={6}
                 autoComplete="current-password"
-                className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
+                className="rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/20 dark:focus:border-brand-400 dark:focus:ring-brand-900/40"
               />
             </label>
 
             <div className="mt-1 flex gap-2">
               <button
-                formAction={signIn}
-                className="flex-1 rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
-              >
-                Se connecter
-              </button>
-              <button
                 formAction={signUp}
-                className="flex-1 rounded-md border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                className="flex-1 rounded-lg border border-black/15 px-4 py-2 text-sm font-medium transition hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
               >
                 Créer un compte
+              </button>
+              <button
+                formAction={signIn}
+                className="flex-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700"
+              >
+                Se connecter
               </button>
             </div>
           </form>
@@ -83,8 +85,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
 
           <form action={signInWithGoogle}>
             <input type="hidden" name="redirect" value={redirectTo} />
-            <button className="flex w-full items-center justify-center gap-2 rounded-md border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
-              Continuer avec Google
+            <button className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-black/15 bg-white px-4 py-2 text-sm font-medium text-black/80 transition hover:bg-black/[0.03] dark:border-white/20 dark:bg-transparent dark:text-white/90 dark:hover:bg-white/10">
+              <GoogleIcon className="h-[18px] w-[18px]" />
+              Se connecter avec Google
             </button>
           </form>
         </div>

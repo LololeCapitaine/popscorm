@@ -5,6 +5,20 @@
   --foreground: #171717;
 }
 
+@theme {
+  /* Marque "pop-corn" : rouge chaud, lisible */
+  --color-brand-50: #fff3f1;
+  --color-brand-100: #ffe3de;
+  --color-brand-200: #ffc7bd;
+  --color-brand-300: #ff9e8e;
+  --color-brand-400: #fa6f59;
+  --color-brand-500: #ef4734;
+  --color-brand-600: #dc2a18;
+  --color-brand-700: #b81f10;
+  --color-brand-800: #971c11;
+  --color-brand-900: #7d1b14;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -22,5 +36,5 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }

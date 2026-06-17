@@ -162,7 +162,7 @@ export function UploadModule() {
             const f = e.target.files?.[0];
             if (f) handleFile(f);
           }}
-          className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90 disabled:opacity-50 dark:file:bg-white dark:file:text-black"
+          className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700 disabled:opacity-50"
         />
       </div>
 

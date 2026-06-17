@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site-header";
+import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = {
   title: "Tarifs — Popscorm",
@@ -45,12 +46,17 @@ export default function PricingPage() {
           {PLANS.map((plan) => (
             <div
               key={plan.name}
-              className={`flex flex-col rounded-2xl border p-6 ${
+              className={`relative flex flex-col rounded-2xl border p-6 ${
                 plan.highlight
-                  ? "border-black bg-white dark:border-white dark:bg-zinc-950"
+                  ? "border-brand-500 bg-white shadow-sm ring-1 ring-brand-200 dark:bg-zinc-950 dark:ring-brand-900/40"
                   : "border-black/10 bg-white dark:border-white/15 dark:bg-zinc-950"
               }`}
             >
+              {plan.highlight && (
+                <span className="absolute -top-2.5 left-6 rounded-full bg-brand-600 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Disponible
+                </span>
+              )}
               <h2 className="text-lg font-semibold">{plan.name}</h2>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-3xl font-bold">{plan.price}</span>
@@ -71,7 +77,7 @@ export default function PricingPage() {
               {plan.available ? (
                 <Link
                   href={plan.href}
-                  className="mt-6 rounded-md bg-black px-4 py-2.5 text-center text-sm font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
+                  className="mt-6 rounded-lg bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-brand-700"
                 >
                   {plan.cta}
                 </Link>
@@ -86,7 +92,7 @@ export default function PricingPage() {
       </main>
 
       <footer className="border-t border-black/10 px-6 py-6 text-center text-xs text-black/40 dark:border-white/15 dark:text-white/40">
-        Popscorm — hébergement et visualisation de modules SCORM.
+        <Logo /> — hébergement et visualisation de modules SCORM.
       </footer>
     </div>
   );

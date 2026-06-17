@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/site-header";
+import { Logo } from "@/components/logo";
 
 const STEPS = [
   {
@@ -48,10 +49,15 @@ export default async function Home() {
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-6 py-20 text-center sm:py-28">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Hébergez et partagez vos modules SCORM, sans LMS.
-          </h1>
+        <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-transparent dark:from-brand-900/15">
+          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-6 py-20 text-center sm:py-28">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-medium text-brand-700 dark:border-brand-900/60 dark:bg-brand-950/40 dark:text-brand-300">
+              🍿 Hébergement SCORM sans LMS
+            </span>
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+              Hébergez et partagez vos modules SCORM,{" "}
+              <span className="text-brand-600">sans LMS.</span>
+            </h1>
           <p className="max-w-xl text-lg text-black/70 dark:text-white/70">
             Déposez un module SCORM et obtenez un lien web public pour le
             visionner — sans plateforme, sans dépendre d’un outil-auteur ni d’un
@@ -60,16 +66,17 @@ export default async function Home() {
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
               href={ctaHref}
-              className="rounded-md bg-black px-6 py-3 text-sm font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
+              className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700"
             >
               {user ? "Aller au tableau de bord" : "Commencer gratuitement"}
             </Link>
             <Link
               href="/pricing"
-              className="rounded-md border border-black/15 px-6 py-3 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              className="rounded-lg border border-black/15 px-6 py-3 text-sm font-medium transition hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             >
               Voir les tarifs
             </Link>
+            </div>
           </div>
         </section>
 
@@ -84,7 +91,7 @@ export default async function Home() {
                 key={s.n}
                 className="rounded-xl border border-black/10 bg-white p-6 dark:border-white/15 dark:bg-zinc-950"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-bold text-white dark:bg-white dark:text-black">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
                   {s.n}
                 </span>
                 <h3 className="mt-4 font-semibold">{s.title}</h3>
@@ -127,7 +134,7 @@ export default async function Home() {
       </main>
 
       <footer className="border-t border-black/10 px-6 py-6 text-center text-xs text-black/40 dark:border-white/15 dark:text-white/40">
-        Popscorm — hébergement et visualisation de modules SCORM.
+        <Logo /> — hébergement et visualisation de modules SCORM.
       </footer>
     </div>
   );
