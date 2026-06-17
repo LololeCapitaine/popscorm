@@ -23,7 +23,7 @@ npm run dev                  # http://localhost:3000
 1. ✅ Squelette Next.js + page d'accueil
 2. ✅ Authentification Supabase (e-mail/mot de passe + Google) — vérifié en prod
 3. ✅ Connexion Cloudflare R2 (testée : put/list/get/delete)
-4. ⬜ Pipeline SCORM (dézippage + manifest + upload R2 + base)
+4. ✅ Pipeline SCORM (dézippage navigateur + manifest + upload R2 + base)
 5. ⬜ Lecteur public `/v/{shareId}` avec scorm-again
 6. ⬜ Quotas de stockage par utilisateur
 7. ⬜ Page d'accueil + page de tarifs (placeholder)
