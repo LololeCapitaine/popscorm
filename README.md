@@ -25,9 +25,19 @@ npm run dev                  # http://localhost:3000
 3. ✅ Connexion Cloudflare R2 (testée : put/list/get/delete)
 4. ✅ Pipeline SCORM (dézippage navigateur + manifest + upload R2 + base)
 5. ✅ Lecteur public `/v/{shareId}` avec scorm-again (1.2 + 2004, sans persistance)
-6. ⬜ Quotas de stockage par utilisateur
-7. ⬜ Page d'accueil + page de tarifs (placeholder)
-8. ⬜ Finitions (design, erreurs, messages)
+6. ✅ Quotas de stockage par utilisateur (plan gratuit : 100 Mo)
+7. ✅ Page d'accueil + page de tarifs (placeholder)
+8. ✅ Finitions (pages 404, état de chargement) — voir notes ci-dessous
+
+## Notes / à finaliser avant production
+
+- **Confirmation e-mail** : désactivée pour les tests. À réactiver dans Supabase
+  (Authentication > Providers > Email > Confirm email).
+- **Isolation du contenu** : les fichiers SCORM sont servis depuis le domaine
+  principal. Pour un durcissement, servir `/content/*` depuis un sous-domaine
+  dédié (isolation d'origine).
+- **Jeton R2** : régénérer le jeton R2 (le secret a transité en clair pendant le
+  développement).
 
 ## Variables d'environnement
 
