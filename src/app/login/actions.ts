@@ -39,10 +39,11 @@ export async function signIn(formData: FormData) {
 export async function signUp(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  const next = safeRedirectPath(formData.get("redirect"));
   const siteUrl = await getSiteUrl();
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { emailRedirectTo: `${siteUrl}/auth/callback` },
@@ -51,7 +52,12 @@ export async function signUp(formData: FormData) {
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
-  // Selon la config Supabase, un e-mail de confirmation peut être requis.
+  // Si la confirmation e-mail est désactivée, une session existe déjà :
+  // l'utilisateur est connecté, on l'envoie directement vers sa destination.
+  if (data.session) {
+    redirect(next);
+  }
+  // Sinon, un e-mail de confirmation a été envoyé.
   redirect("/login?message=verifie-tes-emails");
 }
 
