@@ -1,9 +1,11 @@
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
  * Client S3 configuré pour Cloudflare R2.
@@ -40,6 +42,30 @@ export async function putObject(
       Body: body,
       ContentType: contentType,
     }),
+  );
+}
+
+/** URL signée pour envoyer (PUT) un objet directement depuis le navigateur. */
+export async function presignPut(
+  key: string,
+  contentType: string,
+  expiresIn = 3600,
+): Promise<string> {
+  return getSignedUrl(
+    getR2Client(),
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn },
+  );
+}
+
+/** Récupère un objet (utilisé par le proxy de lecture, étape 5). */
+export async function getObject(key: string) {
+  return getR2Client().send(
+    new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }),
   );
 }
 
