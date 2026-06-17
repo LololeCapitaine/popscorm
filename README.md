@@ -24,7 +24,7 @@ npm run dev                  # http://localhost:3000
 2. ✅ Authentification Supabase (e-mail/mot de passe + Google) — vérifié en prod
 3. ✅ Connexion Cloudflare R2 (testée : put/list/get/delete)
 4. ✅ Pipeline SCORM (dézippage navigateur + manifest + upload R2 + base)
-5. ⬜ Lecteur public `/v/{shareId}` avec scorm-again
+5. ✅ Lecteur public `/v/{shareId}` avec scorm-again (1.2 + 2004, sans persistance)
 6. ⬜ Quotas de stockage par utilisateur
 7. ⬜ Page d'accueil + page de tarifs (placeholder)
 8. ⬜ Finitions (design, erreurs, messages)

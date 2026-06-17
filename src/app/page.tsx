@@ -29,7 +29,7 @@ export default function Home() {
       </div>
 
       <p className="text-xs text-black/40 dark:text-white/40">
-        Étape 2 / 8 — authentification (e-mail + Google) en ligne. ✅
+        Étape 5 / 8 — dépôt, hébergement et lecture de modules SCORM en ligne. ✅
       </p>
     </main>
   );
