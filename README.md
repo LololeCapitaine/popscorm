@@ -21,7 +21,7 @@ npm run dev                  # http://localhost:3000
 ## Avancement (8 étapes)
 
 1. ✅ Squelette Next.js + page d'accueil
-2. ⬜ Authentification Supabase (e-mail + Google)
+2. ✅ Authentification Supabase (e-mail + Google) — code prêt, à brancher sur un projet Supabase
 3. ⬜ Connexion Cloudflare R2
 4. ⬜ Pipeline SCORM (dézippage + manifest + upload R2 + base)
 5. ⬜ Lecteur public `/v/{shareId}` avec scorm-again

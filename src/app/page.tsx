@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 bg-zinc-50 px-6 py-24 text-center font-sans dark:bg-black">
@@ -15,16 +17,19 @@ export default function Home() {
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <span className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white opacity-50 dark:bg-white dark:text-black">
-          Commencer (à venir)
-        </span>
+        <Link
+          href="/login"
+          className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
+        >
+          Commencer
+        </Link>
         <span className="rounded-md border border-black/10 px-5 py-2.5 text-sm font-medium text-black/60 dark:border-white/15 dark:text-white/60">
           Tarifs (à venir)
         </span>
       </div>
 
       <p className="text-xs text-black/40 dark:text-white/40">
-        Étape 1 / 8 — squelette Next.js en place. ✅
+        Étape 2 / 8 — authentification Supabase prête. ✅
       </p>
     </main>
   );
