@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import { formatBytes } from "@/lib/format";
+import { limitForPlan } from "@/lib/plans";
 import { UploadModule } from "./upload-module";
 import { ModuleRow } from "./module-row";
 
@@ -22,12 +23,14 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("profiles")
-      .select("storage_used_bytes")
+      .select("plan, storage_used_bytes")
       .eq("user_id", user.id)
       .single(),
   ]);
 
   const used = Number(profile?.storage_used_bytes ?? 0);
+  const limit = limitForPlan(profile?.plan);
+  const pct = Math.min(100, Math.round((used / limit) * 100));
   const list = modules ?? [];
 
   return (
@@ -47,11 +50,20 @@ export default async function DashboardPage() {
       </header>
 
       <section className="mx-auto w-full max-w-3xl px-6 py-10">
-        <div className="flex items-end justify-between">
+        <div className="flex items-end justify-between gap-4">
           <h1 className="text-2xl font-semibold">Mes modules</h1>
-          <span className="text-xs text-black/50 dark:text-white/50">
-            Espace utilisé : {formatBytes(used)}
-          </span>
+          <div className="w-40 shrink-0">
+            <div className="flex justify-between text-xs text-black/50 dark:text-white/50">
+              <span>{formatBytes(used)}</span>
+              <span>{formatBytes(limit)}</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+              <div
+                className={`h-full rounded-full ${pct >= 100 ? "bg-red-500" : "bg-black dark:bg-white"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="mt-6">

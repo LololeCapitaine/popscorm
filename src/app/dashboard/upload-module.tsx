@@ -68,7 +68,10 @@ export function UploadModule() {
       const presignRes = await fetch("/api/modules/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: rooted.map((f) => f.rel) }),
+        body: JSON.stringify({
+          files: rooted.map((f) => f.rel),
+          totalBytes,
+        }),
       });
       if (!presignRes.ok) {
         throw new Error(

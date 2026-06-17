@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { presignPut } from "@/lib/r2";
 import { contentTypeFor } from "@/lib/mime";
 import { isSafeRelPath } from "@/lib/ids";
+import { limitForPlan } from "@/lib/plans";
+import { formatBytes } from "@/lib/format";
 
 const MAX_FILES = 5000;
 
@@ -45,6 +47,34 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+  }
+
+  // Vérification du quota AVANT tout envoi.
+  const totalBytes = Number((body as { totalBytes?: unknown })?.totalBytes ?? 0);
+  if (!Number.isFinite(totalBytes) || totalBytes < 0) {
+    return NextResponse.json({ error: "Taille invalide" }, { status: 400 });
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("plan, storage_used_bytes")
+    .eq("user_id", user.id)
+    .single();
+
+  const limit = limitForPlan(profile?.plan);
+  const used = Number(profile?.storage_used_bytes ?? 0);
+  if (used + totalBytes > limit) {
+    const remaining = Math.max(0, limit - used);
+    return NextResponse.json(
+      {
+        error: `Espace insuffisant : ce module fait ${formatBytes(
+          totalBytes,
+        )} mais il ne te reste que ${formatBytes(
+          remaining,
+        )} sur ${formatBytes(limit)}.`,
+      },
+      { status: 413 },
+    );
   }
 
   const moduleId = randomUUID();
