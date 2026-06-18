@@ -1,40 +1,59 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block");
+
+/* Mode clair forcé : la DA "pop-corn" est chaude et claire.
+   (Désactive le basculement auto en sombre du système.) */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf7f3; /* crème */
+  --foreground: #1c1714; /* brun très foncé */
 }
 
 @theme {
-  /* Marque "pop-corn" : rouge chaud, lisible */
-  --color-brand-50: #fff3f1;
-  --color-brand-100: #ffe3de;
-  --color-brand-200: #ffc7bd;
-  --color-brand-300: #ff9e8e;
-  --color-brand-400: #fa6f59;
-  --color-brand-500: #ef4734;
-  --color-brand-600: #dc2a18;
-  --color-brand-700: #b81f10;
-  --color-brand-800: #971c11;
-  --color-brand-900: #7d1b14;
+  /* Accent corail "pop-corn" */
+  --color-brand-50: #fff1ef;
+  --color-brand-100: #ffe0db;
+  --color-brand-200: #ffc9c0;
+  --color-brand-300: #ffa499;
+  --color-brand-400: #ff7d72;
+  --color-brand-500: #ff5f5f;
+  --color-brand-600: #f24a4a;
+  --color-brand-700: #d6383b;
+  --color-brand-800: #a83133;
+  --color-brand-900: #8a2b2d;
+
+  /* Neutres chauds (crème / taupe) */
+  --color-cream: #faf7f3;
+  --color-cream-100: #f1ece5;
+  --color-cream-200: #e7e0d8;
+  --color-cream-300: #d8d0c7;
+  --color-taupe: #6b635b;
+  --color-taupe-light: #8a827a;
+  --color-ink: #1c1714;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-hanken);
+  --font-display: var(--font-spartan);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Icônes Material Symbols */
+.material-symbols-rounded {
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+  font-size: 20px;
+  line-height: 1;
+  user-select: none;
 }

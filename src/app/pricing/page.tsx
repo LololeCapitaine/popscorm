@@ -32,7 +32,7 @@ const PLANS = [
 
 export default function PricingPage() {
   return (
-    <div className="flex min-h-dvh flex-col bg-zinc-50 font-sans dark:bg-black">
+    <div className="flex min-h-dvh flex-col bg-cream font-sans">
       <SiteHeader />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">

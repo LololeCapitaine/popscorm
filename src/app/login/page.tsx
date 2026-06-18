@@ -11,7 +11,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
     typeof params.redirect === "string" ? params.redirect : "/dashboard";
 
   return (
-    <main className="flex min-h-dvh flex-1 flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-zinc-50 px-6 py-16 font-sans dark:from-zinc-950 dark:to-black">
+    <main className="flex min-h-dvh flex-1 flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-cream px-6 py-16 font-sans">
       <div className="w-full max-w-sm">
         <Link
           href="/"

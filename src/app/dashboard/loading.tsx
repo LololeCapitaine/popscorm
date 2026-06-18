@@ -1,15 +1,22 @@
 export default function DashboardLoading() {
   return (
-    <main className="flex flex-1 flex-col bg-zinc-50 font-sans dark:bg-black">
-      <div className="h-[57px] border-b border-black/10 dark:border-white/15" />
-      <section className="mx-auto w-full max-w-3xl px-6 py-10">
-        <div className="h-7 w-40 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-        <div className="mt-6 h-32 animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
-        <div className="mt-8 flex flex-col gap-3">
-          <div className="h-16 animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
-          <div className="h-16 animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+    <div className="flex h-dvh w-full bg-cream font-sans">
+      <aside className="w-64 shrink-0 border-r border-cream-200 bg-white/60 p-4">
+        <div className="h-6 w-28 animate-pulse rounded bg-cream-200" />
+        <div className="mt-6 h-10 animate-pulse rounded-xl bg-cream-200" />
+        <div className="mt-6 flex flex-col gap-2">
+          <div className="h-9 animate-pulse rounded-lg bg-cream-100" />
+          <div className="h-9 animate-pulse rounded-lg bg-cream-100" />
+          <div className="h-9 animate-pulse rounded-lg bg-cream-100" />
         </div>
-      </section>
-    </main>
+      </aside>
+      <main className="flex-1 p-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="h-8 w-40 animate-pulse rounded bg-cream-200" />
+          <div className="mt-6 h-11 animate-pulse rounded-xl bg-cream-100" />
+          <div className="mt-6 h-64 animate-pulse rounded-2xl bg-cream-100" />
+        </div>
+      </main>
+    </div>
   );
 }

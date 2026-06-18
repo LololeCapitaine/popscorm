@@ -44,7 +44,7 @@ export default async function Home() {
   const ctaHref = user ? "/dashboard" : "/login";
 
   return (
-    <div className="flex min-h-dvh flex-col bg-zinc-50 font-sans dark:bg-black">
+    <div className="flex min-h-dvh flex-col bg-cream font-sans">
       <SiteHeader />
 
       <main className="flex-1">
@@ -54,9 +54,9 @@ export default async function Home() {
             <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-medium text-brand-700 dark:border-brand-900/60 dark:bg-brand-950/40 dark:text-brand-300">
               🍿 Hébergement SCORM sans LMS
             </span>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
               Hébergez et partagez vos modules SCORM,{" "}
-              <span className="text-brand-600">sans LMS.</span>
+              <span className="text-brand-500">sans LMS.</span>
             </h1>
           <p className="max-w-xl text-lg text-black/70 dark:text-white/70">
             Déposez un module SCORM et obtenez un lien web public pour le
