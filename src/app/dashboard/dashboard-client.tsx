@@ -95,6 +95,88 @@ interface FormState {
   meta?: { version: string; size: number };
 }
 
+interface AnalyzedZip {
+  rooted: { rel: string; bytes: Uint8Array }[];
+  info: ScormInfo;
+  totalBytes: number;
+  manifestXml: string;
+  entryContent: string;
+}
+
+// Dézippe + analyse un .zip SCORM dans le navigateur (upload et remplacement).
+async function analyzeZipFile(file: File): Promise<AnalyzedZip> {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const entries = await new Promise<Record<string, Uint8Array>>(
+    (resolve, reject) =>
+      unzip(buf, (err, data) => (err ? reject(err) : resolve(data))),
+  );
+  const allPaths = Object.keys(entries).filter((p) => !p.endsWith("/"));
+  const manifestPath = detectManifestPath(allPaths);
+  if (!manifestPath) {
+    throw new Error(
+      "Ce fichier ne contient pas de imsmanifest.xml : ce n'est pas un module SCORM valide.",
+    );
+  }
+  const manifestXml = new TextDecoder().decode(entries[manifestPath]);
+  const info = analyzeScorm(allPaths, manifestXml, manifestPath);
+
+  const dir = info.manifestDir;
+  const rooted = allPaths
+    .filter((p) => p.startsWith(dir))
+    .map((p) => ({ rel: p.slice(dir.length), bytes: entries[p] }))
+    .filter((f) => f.rel.length > 0);
+
+  const entryFile = info.entryPath.split(/[?#]/)[0];
+  if (!rooted.some((f) => f.rel === entryFile)) {
+    throw new Error(
+      `Le fichier de lancement « ${entryFile} » est introuvable dans le paquet.`,
+    );
+  }
+  const totalBytes = rooted.reduce((s, f) => s + f.bytes.byteLength, 0);
+
+  let entryContent = "";
+  const entryBytes = entries[dir + entryFile];
+  if (entryBytes && entryBytes.byteLength < 2_000_000) {
+    try {
+      entryContent = new TextDecoder().decode(entryBytes);
+    } catch {
+      /* ignore */
+    }
+  }
+  return { rooted, info, totalBytes, manifestXml, entryContent };
+}
+
+// Envoie les fichiers vers R2 via des URLs signées (concurrence limitée).
+async function uploadFiles(
+  uploads: { path: string; url: string; contentType: string }[],
+  rooted: { rel: string; bytes: Uint8Array }[],
+  onProgress: (done: number) => void,
+) {
+  const byPath = new Map(uploads.map((u) => [u.path, u]));
+  let done = 0;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < rooted.length) {
+      const f = rooted[cursor++];
+      const u = byPath.get(f.rel);
+      if (!u) throw new Error(`URL d'envoi manquante pour ${f.rel}`);
+      const put = await fetch(u.url, {
+        method: "PUT",
+        body: f.bytes as BodyInit,
+        headers: { "Content-Type": u.contentType },
+      });
+      if (!put.ok) {
+        throw new Error(`Échec de l'envoi de ${f.rel} (HTTP ${put.status}).`);
+      }
+      done += 1;
+      onProgress(done);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, rooted.length) }, worker),
+  );
+}
+
 export function DashboardClient({ user, modules, used, limit }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -194,62 +276,28 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
     setUploadError(null);
     setPhase("reading");
     try {
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const entries = await new Promise<Record<string, Uint8Array>>(
-        (resolve, reject) =>
-          unzip(buf, (err, data) => (err ? reject(err) : resolve(data))),
-      );
-      const allPaths = Object.keys(entries).filter((p) => !p.endsWith("/"));
-      const manifestPath = detectManifestPath(allPaths);
-      if (!manifestPath) {
-        throw new Error(
-          "Ce fichier ne contient pas de imsmanifest.xml : ce n'est pas un module SCORM valide.",
-        );
-      }
-      const manifestXml = new TextDecoder().decode(entries[manifestPath]);
-      const info = analyzeScorm(allPaths, manifestXml, manifestPath);
-
-      const dir = info.manifestDir;
-      const rooted = allPaths
-        .filter((p) => p.startsWith(dir))
-        .map((p) => ({ rel: p.slice(dir.length), bytes: entries[p] }))
-        .filter((f) => f.rel.length > 0);
-
-      const entryFile = info.entryPath.split(/[?#]/)[0];
-      if (!rooted.some((f) => f.rel === entryFile)) {
-        throw new Error(
-          `Le fichier de lancement « ${entryFile} » est introuvable dans le paquet.`,
-        );
-      }
-      const totalBytes = rooted.reduce((s, f) => s + f.bytes.byteLength, 0);
-      pendingRef.current = { rooted, info, totalBytes };
-
-      // Détection de l'outil (lecture légère du fichier de lancement).
-      let entryContent = "";
-      const entryBytes = entries[dir + entryFile];
-      if (entryBytes && entryBytes.byteLength < 2_000_000) {
-        try {
-          entryContent = new TextDecoder().decode(entryBytes);
-        } catch {
-          /* ignore */
-        }
-      }
+      const a = await analyzeZipFile(file);
+      pendingRef.current = {
+        rooted: a.rooted,
+        info: a.info,
+        totalBytes: a.totalBytes,
+      };
       const tool =
         detectTool(
-          rooted.map((f) => f.rel),
-          manifestXml,
-          entryContent,
+          a.rooted.map((f) => f.rel),
+          a.manifestXml,
+          a.entryContent,
         ) ?? "Autre";
 
       setPhase("idle");
       if (fileRef.current) fileRef.current.value = "";
       setForm({
         mode: "create",
-        title: info.title?.trim() || file.name.replace(/\.zip$/i, ""),
+        title: a.info.title?.trim() || file.name.replace(/\.zip$/i, ""),
         status: "public",
         password: "",
         tool,
-        meta: { version: info.version, size: totalBytes },
+        meta: { version: a.info.version, size: a.totalBytes },
       });
     } catch (e) {
       setPhase("error");
@@ -258,7 +306,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
     }
   }
 
-  // --- Upload réel après validation de la modale ---
+  // --- Upload réel après validation de la modale (création) ---
   async function runUpload(values: {
     title: string;
     status: Status;
@@ -270,7 +318,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
     setUploadError(null);
     try {
       const { rooted, info, totalBytes } = pending;
-
       setPhase("uploading");
       setProgress({ done: 0, total: rooted.length });
 
@@ -285,33 +332,9 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
             "Échec de la préparation de l'envoi.",
         );
       }
-      const { moduleId, uploads } = (await presignRes.json()) as {
-        moduleId: string;
-        uploads: { path: string; url: string; contentType: string }[];
-      };
-      const byPath = new Map(uploads.map((u) => [u.path, u]));
-
-      let done = 0;
-      let cursor = 0;
-      const worker = async () => {
-        while (cursor < rooted.length) {
-          const f = rooted[cursor++];
-          const u = byPath.get(f.rel);
-          if (!u) throw new Error(`URL d'envoi manquante pour ${f.rel}`);
-          const put = await fetch(u.url, {
-            method: "PUT",
-            body: f.bytes as BodyInit,
-            headers: { "Content-Type": u.contentType },
-          });
-          if (!put.ok) {
-            throw new Error(`Échec de l'envoi de ${f.rel} (HTTP ${put.status}).`);
-          }
-          done += 1;
-          setProgress({ done, total: rooted.length });
-        }
-      };
-      await Promise.all(
-        Array.from({ length: Math.min(CONCURRENCY, rooted.length) }, worker),
+      const { moduleId, uploads } = await presignRes.json();
+      await uploadFiles(uploads, rooted, (done) =>
+        setProgress({ done, total: rooted.length }),
       );
 
       setPhase("saving");
@@ -337,6 +360,61 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
       }
 
       pendingRef.current = null;
+      setPhase("idle");
+      setProgress({ done: 0, total: 0 });
+      router.refresh();
+    } catch (e) {
+      setPhase("error");
+      setUploadError(e instanceof Error ? e.message : "Erreur inconnue");
+    }
+  }
+
+  // --- Remplacement du fichier d'un module existant ---
+  async function runReplace(moduleId: string, staged: AnalyzedZip) {
+    setUploadError(null);
+    try {
+      const { rooted, info, totalBytes } = staged;
+      setPhase("uploading");
+      setProgress({ done: 0, total: rooted.length });
+
+      const presignRes = await fetch("/api/modules/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          files: rooted.map((f) => f.rel),
+          totalBytes,
+          replaceModuleId: moduleId,
+        }),
+      });
+      if (!presignRes.ok) {
+        throw new Error(
+          (await presignRes.json().catch(() => ({}))).error ??
+            "Échec de la préparation de l'envoi.",
+        );
+      }
+      const { moduleId: newModuleId, uploads } = await presignRes.json();
+      await uploadFiles(uploads, rooted, (done) =>
+        setProgress({ done, total: rooted.length }),
+      );
+
+      setPhase("saving");
+      const res = await fetch(`/api/modules/${moduleId}/replace`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newModuleId,
+          scormVersion: info.version,
+          entryPath: info.entryPath,
+          sizeBytes: totalBytes,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          (await res.json().catch(() => ({}))).error ??
+            "Échec de la mise à jour du fichier.",
+        );
+      }
+
       setPhase("idle");
       setProgress({ done: 0, total: 0 });
       router.refresh();
@@ -686,6 +764,10 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                 password: values.password,
                 tool: values.tool,
               });
+              // Si une nouvelle version a été préparée, on remplace le fichier.
+              if (values.replace) {
+                void runReplace(form.moduleId, values.replace);
+              }
             }
           }}
         />
@@ -767,6 +849,7 @@ function ModuleFormModal({
     status: Status;
     password: string;
     tool: string;
+    replace?: AnalyzedZip;
   }) => Promise<void>;
 }) {
   const [title, setTitle] = useState(form.title);
@@ -775,6 +858,30 @@ function ModuleFormModal({
   const [tool, setTool] = useState(form.tool);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const replaceRef = useRef<AnalyzedZip | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [staged, setStaged] = useState<{ version: string; size: number } | null>(
+    null,
+  );
+
+  async function pickReplacement(file: File) {
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const a = await analyzeZipFile(file);
+      replaceRef.current = a;
+      setStaged({ version: a.info.version, size: a.totalBytes });
+    } catch (e) {
+      replaceRef.current = null;
+      setStaged(null);
+      setError(e instanceof Error ? e.message : "Fichier invalide");
+    } finally {
+      setAnalyzing(false);
+      if (replaceInputRef.current) replaceInputRef.current.value = "";
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -785,7 +892,13 @@ function ModuleFormModal({
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ title: title.trim(), status, password, tool });
+      await onSubmit({
+        title: title.trim(),
+        status,
+        password,
+        tool,
+        replace: replaceRef.current ?? undefined,
+      });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur");
@@ -866,6 +979,53 @@ function ModuleFormModal({
               className="rounded-lg border border-cream-200 px-3 py-2 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </label>
+        )}
+
+        {form.mode === "edit" && (
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Fichier du module</span>
+            <input
+              ref={replaceInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) pickReplacement(f);
+              }}
+            />
+            {staged ? (
+              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <span className="text-xs text-emerald-700">
+                  Nouvelle version prête : SCORM {staged.version} ·{" "}
+                  {formatBytes(staged.size)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    replaceRef.current = null;
+                    setStaged(null);
+                  }}
+                  className="text-xs font-medium text-taupe hover:text-ink"
+                >
+                  Retirer
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => replaceInputRef.current?.click()}
+                disabled={analyzing}
+                className="flex items-center justify-center gap-2 rounded-lg border border-cream-200 px-3 py-2 text-sm font-medium text-taupe transition hover:bg-cream-100 disabled:opacity-60"
+              >
+                <Icon name="upload_file" className="text-[20px]" />
+                {analyzing ? "Analyse…" : "Remplacer le fichier (nouvelle version)"}
+              </button>
+            )}
+            <p className="text-xs text-taupe">
+              Le lien de partage reste identique.
+            </p>
+          </div>
         )}
 
         {error && <p className="text-sm text-brand-700">{error}</p>}

@@ -62,7 +62,21 @@ export async function POST(request: Request) {
     .single();
 
   const limit = limitForPlan(profile?.plan);
-  const used = Number(profile?.storage_used_bytes ?? 0);
+  let used = Number(profile?.storage_used_bytes ?? 0);
+
+  // Remplacement d'un module existant : on ne recompte pas l'ancienne version.
+  const replaceModuleId = body
+    ? String((body as { replaceModuleId?: unknown }).replaceModuleId ?? "")
+    : "";
+  if (replaceModuleId) {
+    const { data: old } = await supabase
+      .from("modules")
+      .select("size_bytes")
+      .eq("id", replaceModuleId)
+      .single();
+    if (old) used = Math.max(0, used - Number(old.size_bytes ?? 0));
+  }
+
   if (used + totalBytes > limit) {
     const remaining = Math.max(0, limit - used);
     return NextResponse.json(
