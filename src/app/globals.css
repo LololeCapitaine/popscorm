@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block");
 
 /* Mode clair forcé : la DA "pop-corn" est chaude et claire.
    (Désactive le basculement auto en sombre du système.) */
@@ -48,6 +47,9 @@ body {
 
 /* Icônes Material Symbols */
 .material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
   font-variation-settings:
     "FILL" 0,
     "wght" 400,
@@ -55,5 +57,11 @@ body {
     "opsz" 24;
   font-size: 20px;
   line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
   user-select: none;
 }
