@@ -3,11 +3,13 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { unzip } from "fflate";
-import { analyzeScorm, detectManifestPath } from "@/lib/scorm";
+import { analyzeScorm, detectManifestPath, type ScormInfo } from "@/lib/scorm";
 import { formatBytes } from "@/lib/format";
 import { Logo } from "@/components/logo";
 import { Icon } from "@/components/icon";
 import { signOut } from "@/app/login/actions";
+
+type Status = "public" | "private" | "inactive";
 
 interface ModuleItem {
   id: string;
@@ -16,6 +18,9 @@ interface ModuleItem {
   scorm_version: string;
   size_bytes: number;
   created_at: string;
+  status: Status;
+  password: string | null;
+  tool: string | null;
 }
 
 interface UserInfo {
@@ -37,15 +42,51 @@ type Phase = "idle" | "reading" | "uploading" | "saving" | "error";
 
 const CONCURRENCY = 6;
 
+const STATUS_META: Record<
+  Status,
+  { label: string; cls: string; icon: string }
+> = {
+  public: {
+    label: "Public",
+    cls: "bg-emerald-50 text-emerald-700",
+    icon: "public",
+  },
+  private: { label: "Privé", cls: "bg-amber-50 text-amber-700", icon: "lock" },
+  inactive: {
+    label: "Inactif",
+    cls: "bg-stone-100 text-stone-500",
+    icon: "block",
+  },
+};
+
+interface PendingUpload {
+  rooted: { rel: string; bytes: Uint8Array }[];
+  info: ScormInfo;
+  totalBytes: number;
+}
+
+interface FormState {
+  mode: "create" | "edit";
+  moduleId?: string;
+  title: string;
+  status: Status;
+  password: string;
+  meta?: { version: string; size: number };
+}
+
 export function DashboardClient({ user, modules, used, limit }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const pendingRef = useRef<PendingUpload | null>(null);
 
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Set<string>>(new Set());
+
   const [linkModule, setLinkModule] = useState<ModuleItem | null>(null);
+  const [lockModule, setLockModule] = useState<ModuleItem | null>(null);
+  const [form, setForm] = useState<FormState | null>(null);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -54,14 +95,14 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
     phase === "reading" || phase === "uploading" || phase === "saving";
 
   const pct = Math.min(100, Math.round((used / limit) * 100));
+  const remaining = Math.max(0, limit - used);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = modules.filter((m) =>
       q ? m.title.toLowerCase().includes(q) : true,
     );
-    const sorted = [...list];
-    sorted.sort((a, b) => {
+    return [...list].sort((a, b) => {
       switch (sort) {
         case "name":
           return a.title.localeCompare(b.title, "fr");
@@ -73,7 +114,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
           return +new Date(b.created_at) - +new Date(a.created_at);
       }
     });
-    return sorted;
   }, [modules, search, sort]);
 
   function toggle(id: string) {
@@ -113,35 +153,31 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
   }
 
   async function deleteOne(m: ModuleItem) {
-    if (!confirm(`Supprimer « ${m.title} » ? Cette action est définitive.`)) {
-      return;
+    if (confirm(`Supprimer « ${m.title} » ? Cette action est définitive.`)) {
+      await deleteModule(m.id);
     }
-    await deleteModule(m.id);
   }
 
   async function deleteSelected() {
     if (
-      !confirm(
+      confirm(
         `Supprimer ${selected.size} module(s) ? Cette action est définitive.`,
       )
     ) {
-      return;
-    }
-    for (const id of Array.from(selected)) {
-      await deleteModule(id);
+      for (const id of Array.from(selected)) await deleteModule(id);
     }
   }
 
-  async function handleFile(file: File) {
+  // --- Upload : sélection du fichier -> analyse -> ouverture de la modale ---
+  async function onFilePicked(file: File) {
     setUploadError(null);
+    setPhase("reading");
     try {
-      setPhase("reading");
       const buf = new Uint8Array(await file.arrayBuffer());
       const entries = await new Promise<Record<string, Uint8Array>>(
         (resolve, reject) =>
           unzip(buf, (err, data) => (err ? reject(err) : resolve(data))),
       );
-
       const allPaths = Object.keys(entries).filter((p) => !p.endsWith("/"));
       const manifestPath = detectManifestPath(allPaths);
       if (!manifestPath) {
@@ -165,6 +201,38 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
         );
       }
       const totalBytes = rooted.reduce((s, f) => s + f.bytes.byteLength, 0);
+      pendingRef.current = { rooted, info, totalBytes };
+
+      setPhase("idle");
+      if (fileRef.current) fileRef.current.value = "";
+      setForm({
+        mode: "create",
+        title: info.title?.trim() || file.name.replace(/\.zip$/i, ""),
+        status: "public",
+        password: "",
+        meta: { version: info.version, size: totalBytes },
+      });
+    } catch (e) {
+      setPhase("error");
+      setUploadError(e instanceof Error ? e.message : "Erreur de lecture");
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  // --- Upload réel après validation de la modale ---
+  async function runUpload(values: {
+    title: string;
+    status: Status;
+    password: string;
+  }) {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    setUploadError(null);
+    try {
+      const { rooted, info, totalBytes } = pending;
+
+      setPhase("uploading");
+      setProgress({ done: 0, total: rooted.length });
 
       const presignRes = await fetch("/api/modules/presign", {
         method: "POST",
@@ -183,8 +251,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
       };
       const byPath = new Map(uploads.map((u) => [u.path, u]));
 
-      setPhase("uploading");
-      setProgress({ done: 0, total: rooted.length });
       let done = 0;
       let cursor = 0;
       const worker = async () => {
@@ -209,16 +275,17 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
       );
 
       setPhase("saving");
-      const title = info.title?.trim() || file.name.replace(/\.zip$/i, "");
       const commit = await fetch("/api/modules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           moduleId,
-          title,
+          title: values.title,
           scormVersion: info.version,
           entryPath: info.entryPath,
           sizeBytes: totalBytes,
+          status: values.status,
+          password: values.password,
         }),
       });
       if (!commit.ok) {
@@ -228,17 +295,32 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
         );
       }
 
+      pendingRef.current = null;
       setPhase("idle");
       setProgress({ done: 0, total: 0 });
-      if (fileRef.current) fileRef.current.value = "";
       router.refresh();
     } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "Erreur inconnue");
       setPhase("error");
+      setUploadError(e instanceof Error ? e.message : "Erreur inconnue");
     }
   }
 
-  const remaining = Math.max(0, limit - used);
+  async function patchModule(
+    id: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const res = await fetch(`/api/modules/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(
+        (await res.json().catch(() => ({}))).error ?? "Échec de l'enregistrement",
+      );
+    }
+    router.refresh();
+  }
 
   return (
     <div className="flex h-dvh w-full bg-cream font-sans text-ink">
@@ -249,7 +331,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) handleFile(f);
+          if (f) onFilePicked(f);
         }}
       />
 
@@ -283,7 +365,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
         </nav>
 
         <div className="mt-auto flex flex-col gap-4">
-          {/* Stockage */}
           <div className="rounded-xl border border-cream-200 bg-white p-3">
             <div className="flex items-center justify-between text-xs text-taupe">
               <span>Stockage</span>
@@ -300,7 +381,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
             </p>
           </div>
 
-          {/* Compte */}
           <div className="flex items-center gap-3 rounded-xl border border-cream-200 bg-white p-2.5">
             <Avatar user={user} />
             <div className="min-w-0 flex-1">
@@ -332,7 +412,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
             {formatBytes(remaining)} restants
           </p>
 
-          {/* Bandeau d'upload en cours */}
           {(uploading || phase === "error") && (
             <div className="mt-5 rounded-xl border border-cream-200 bg-white px-4 py-3 text-sm">
               {phase === "reading" && "Lecture et analyse du paquet…"}
@@ -345,9 +424,8 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
             </div>
           )}
 
-          {/* Toolbar */}
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
+            <div className="relative min-w-[200px] flex-1">
               <Icon
                 name="search"
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-taupe-light"
@@ -371,7 +449,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
             </select>
           </div>
 
-          {/* Barre de sélection */}
           {selected.size > 0 && (
             <div className="mt-4 flex items-center justify-between rounded-xl bg-brand-50 px-4 py-2.5 text-sm">
               <span className="font-medium text-brand-700">
@@ -386,7 +463,6 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
             </div>
           )}
 
-          {/* Tableau */}
           <div className="mt-6 overflow-hidden rounded-2xl border border-cream-200 bg-white">
             {visible.length === 0 ? (
               <div className="px-6 py-16 text-center text-sm text-taupe">
@@ -415,69 +491,122 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((m) => (
-                    <tr
-                      key={m.id}
-                      className="border-b border-cream-100 last:border-0 hover:bg-cream/50"
-                    >
-                      <td className="px-4 py-3 align-middle">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(m.id)}
-                          onChange={() => toggle(m.id)}
-                          className="accent-brand-500"
-                        />
-                      </td>
-                      <td className="px-2 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
-                            <Icon name="school" />
+                  {visible.map((m) => {
+                    const st = STATUS_META[m.status] ?? STATUS_META.public;
+                    return (
+                      <tr
+                        key={m.id}
+                        className="border-b border-cream-100 last:border-0 hover:bg-cream/50"
+                      >
+                        <td className="px-4 py-3 align-middle">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(m.id)}
+                            onChange={() => toggle(m.id)}
+                            className="accent-brand-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <button
+                            onClick={() =>
+                              setForm({
+                                mode: "edit",
+                                moduleId: m.id,
+                                title: m.title,
+                                status: m.status,
+                                password: m.password ?? "",
+                              })
+                            }
+                            className="group flex items-center gap-3 text-left"
+                          >
+                            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
+                              <Icon
+                                name="school"
+                                className="text-[20px] group-hover:opacity-0"
+                              />
+                              <Icon
+                                name="edit"
+                                className="absolute text-[18px] opacity-0 group-hover:opacity-100"
+                              />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium group-hover:text-brand-600">
+                                {m.title}
+                              </span>
+                              <span className="block text-xs text-taupe">
+                                {formatBytes(Number(m.size_bytes))} ·{" "}
+                                {new Date(m.created_at).toLocaleDateString(
+                                  "fr-FR",
+                                )}
+                              </span>
+                            </span>
+                          </button>
+                        </td>
+                        <td className="px-2 py-3 capitalize text-taupe">
+                          {m.tool || "—"}
+                        </td>
+                        <td className="px-2 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${st.cls}`}
+                          >
+                            {st.label}
                           </span>
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">{m.title}</p>
-                            <p className="text-xs text-taupe">
-                              {formatBytes(Number(m.size_bytes))} ·{" "}
-                              {new Date(m.created_at).toLocaleDateString("fr-FR")}
-                            </p>
+                        </td>
+                        <td className="px-2 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <a
+                              href={`/v/${m.share_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Ouvrir"
+                              className="flex rounded-lg p-2 text-taupe transition hover:bg-cream-100 hover:text-ink"
+                            >
+                              <Icon name="visibility" className="text-[20px]" />
+                            </a>
+                            <button
+                              onClick={() =>
+                                setForm({
+                                  mode: "edit",
+                                  moduleId: m.id,
+                                  title: m.title,
+                                  status: m.status,
+                                  password: m.password ?? "",
+                                })
+                              }
+                              title="Éditer"
+                              className="flex rounded-lg p-2 text-taupe transition hover:bg-cream-100 hover:text-ink"
+                            >
+                              <Icon name="edit" className="text-[20px]" />
+                            </button>
+                            <button
+                              onClick={() => setLinkModule(m)}
+                              title="Lien de partage"
+                              className="flex rounded-lg p-2 text-taupe transition hover:bg-cream-100 hover:text-ink"
+                            >
+                              <Icon name="link" className="text-[20px]" />
+                            </button>
+                            {m.status === "private" && (
+                              <button
+                                onClick={() => setLockModule(m)}
+                                title="Mot de passe"
+                                className="flex rounded-lg p-2 text-taupe transition hover:bg-cream-100 hover:text-ink"
+                              >
+                                <Icon name="lock" className="text-[20px]" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => deleteOne(m)}
+                              disabled={busy.has(m.id)}
+                              title="Supprimer"
+                              className="flex rounded-lg p-2 text-taupe transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                            >
+                              <Icon name="delete" className="text-[20px]" />
+                            </button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-2 py-3 text-taupe">—</td>
-                      <td className="px-2 py-3">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                          Public
-                        </span>
-                      </td>
-                      <td className="px-2 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <a
-                            href={`/v/${m.share_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Ouvrir"
-                            className="flex rounded-lg p-2 text-taupe transition hover:bg-cream-100 hover:text-ink"
-                          >
-                            <Icon name="visibility" className="text-[20px]" />
-                          </a>
-                          <button
-                            onClick={() => setLinkModule(m)}
-                            title="Lien de partage"
-                            className="flex rounded-lg p-2 text-taupe transition hover:bg-cream-100 hover:text-ink"
-                          >
-                            <Icon name="link" className="text-[20px]" />
-                          </button>
-                          <button
-                            onClick={() => deleteOne(m)}
-                            disabled={busy.has(m.id)}
-                            title="Supprimer"
-                            className="flex rounded-lg p-2 text-taupe transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                          >
-                            <Icon name="delete" className="text-[20px]" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -486,9 +615,33 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
       </main>
 
       {linkModule && (
-        <LinkModal
-          module={linkModule}
-          onClose={() => setLinkModule(null)}
+        <LinkModal module={linkModule} onClose={() => setLinkModule(null)} />
+      )}
+
+      {lockModule && (
+        <LockModal
+          module={lockModule}
+          onClose={() => setLockModule(null)}
+          onSave={(pwd) => patchModule(lockModule.id, { password: pwd })}
+        />
+      )}
+
+      {form && (
+        <ModuleFormModal
+          form={form}
+          onClose={() => setForm(null)}
+          onSubmit={async (values) => {
+            if (form.mode === "create") {
+              // On lance l'upload (banderole de progression) et on ferme la modale.
+              void runUpload(values);
+            } else if (form.moduleId) {
+              await patchModule(form.moduleId, {
+                title: values.title,
+                status: values.status,
+                password: values.password,
+              });
+            }
+          }}
         />
       )}
     </div>
@@ -511,6 +664,240 @@ function Avatar({ user }: { user: UserInfo }) {
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">
       {user.initials}
     </span>
+  );
+}
+
+function Overlay({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ModalHeader({
+  title,
+  onClose,
+}: {
+  title: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <button
+        onClick={onClose}
+        className="flex rounded-lg p-1 text-taupe hover:bg-cream-100"
+      >
+        <Icon name="close" />
+      </button>
+    </div>
+  );
+}
+
+function ModuleFormModal({
+  form,
+  onClose,
+  onSubmit,
+}: {
+  form: FormState;
+  onClose: () => void;
+  onSubmit: (v: {
+    title: string;
+    status: Status;
+    password: string;
+  }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(form.title);
+  const [status, setStatus] = useState<Status>(form.status);
+  const [password, setPassword] = useState(form.password);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (status === "private" && !password.trim()) {
+      setError("Un mot de passe est requis pour un module privé.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit({ title: title.trim(), status, password });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Overlay onClose={onClose}>
+      <ModalHeader
+        title={form.mode === "create" ? "Nouveau module" : "Éditer le module"}
+        onClose={onClose}
+      />
+
+      {form.meta && (
+        <p className="mt-1 text-sm text-taupe">
+          SCORM {form.meta.version} · {formatBytes(form.meta.size)}
+        </p>
+      )}
+
+      <form onSubmit={submit} className="mt-4 flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Nom du module</span>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="rounded-lg border border-cream-200 px-3 py-2 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+          />
+        </label>
+
+        <div className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Statut</span>
+          <div className="grid grid-cols-3 gap-2">
+            {(["public", "private", "inactive"] as Status[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${
+                  status === s
+                    ? "border-brand-400 bg-brand-50 text-brand-700"
+                    : "border-cream-200 text-taupe hover:bg-cream-100"
+                }`}
+              >
+                {STATUS_META[s].label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-taupe">
+            {status === "public" && "Accessible à toute personne ayant le lien."}
+            {status === "private" && "Protégé par un mot de passe."}
+            {status === "inactive" && "Le lien est désactivé."}
+          </p>
+        </div>
+
+        {status === "private" && (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Mot de passe</span>
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mot de passe du module"
+              className="rounded-lg border border-cream-200 px-3 py-2 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            />
+          </label>
+        )}
+
+        {error && <p className="text-sm text-brand-700">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-cream-200 px-4 py-2 text-sm font-medium text-taupe transition hover:bg-cream-100"
+          >
+            Annuler
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-60"
+          >
+            {submitting
+              ? "…"
+              : form.mode === "create"
+                ? "Uploader"
+                : "Enregistrer"}
+          </button>
+        </div>
+      </form>
+    </Overlay>
+  );
+}
+
+function LockModal({
+  module,
+  onClose,
+  onSave,
+}: {
+  module: ModuleItem;
+  onClose: () => void;
+  onSave: (password: string) => Promise<void>;
+}) {
+  const [password, setPassword] = useState(module.password ?? "");
+  const [reveal, setReveal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!password.trim()) {
+      setError("Le mot de passe ne peut pas être vide.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(password);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Overlay onClose={onClose}>
+      <ModalHeader title="Mot de passe du module" onClose={onClose} />
+      <p className="mt-1 text-sm text-taupe">{module.title}</p>
+      <div className="mt-4 flex gap-2">
+        <input
+          type={reveal ? "text" : "password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="flex-1 rounded-lg border border-cream-200 px-3 py-2 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+        />
+        <button
+          onClick={() => setReveal((r) => !r)}
+          className="flex items-center rounded-lg border border-cream-200 px-3 text-taupe transition hover:bg-cream-100"
+          title={reveal ? "Masquer" : "Afficher"}
+        >
+          <Icon name={reveal ? "visibility_off" : "visibility"} />
+        </button>
+      </div>
+      {error && <p className="mt-2 text-sm text-brand-700">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          className="rounded-lg border border-cream-200 px-4 py-2 text-sm font-medium text-taupe transition hover:bg-cream-100"
+        >
+          Annuler
+        </button>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-60"
+        >
+          {saving ? "…" : "Enregistrer"}
+        </button>
+      </div>
+    </Overlay>
   );
 }
 
@@ -538,39 +925,36 @@ function LinkModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Lien de partage</h2>
-          <button
-            onClick={onClose}
-            className="flex rounded-lg p-1 text-taupe hover:bg-cream-100"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <p className="mt-1 text-sm text-taupe">{module.title}</p>
-        <div className="mt-4 flex gap-2">
-          <input
-            readOnly
-            value={url}
-            className="flex-1 rounded-lg border border-cream-200 bg-cream px-3 py-2 text-sm text-taupe outline-none"
+    <Overlay onClose={onClose}>
+      <ModalHeader title="Lien de partage" onClose={onClose} />
+      <p className="mt-1 text-sm text-taupe">{module.title}</p>
+      <div className="mt-4 flex gap-2">
+        <input
+          readOnly
+          value={url}
+          className="flex-1 rounded-lg border border-cream-200 bg-cream px-3 py-2 text-sm text-taupe outline-none"
+        />
+        <button
+          onClick={copy}
+          className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600"
+        >
+          <Icon
+            name={copied ? "check" : "content_copy"}
+            className="text-[18px]"
           />
-          <button
-            onClick={copy}
-            className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600"
-          >
-            <Icon name={copied ? "check" : "content_copy"} className="text-[18px]" />
-            {copied ? "Copié" : "Copier"}
-          </button>
-        </div>
+          {copied ? "Copié" : "Copier"}
+        </button>
       </div>
-    </div>
+      {module.status === "private" && (
+        <p className="mt-3 text-xs text-amber-700">
+          Ce module est privé : un mot de passe sera demandé à l’ouverture.
+        </p>
+      )}
+      {module.status === "inactive" && (
+        <p className="mt-3 text-xs text-stone-500">
+          Ce module est inactif : le lien est actuellement désactivé.
+        </p>
+      )}
+    </Overlay>
   );
 }

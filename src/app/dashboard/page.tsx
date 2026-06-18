@@ -26,7 +26,9 @@ export default async function DashboardPage() {
   const [{ data: modules }, { data: profile }] = await Promise.all([
     supabase
       .from("modules")
-      .select("id, title, share_id, scorm_version, size_bytes, created_at")
+      .select(
+        "id, title, share_id, scorm_version, size_bytes, created_at, status, password, tool",
+      )
       .order("created_at", { ascending: false }),
     supabase
       .from("profiles")

@@ -53,6 +53,23 @@ export async function POST(request: Request) {
   if (!title) title = "Module sans titre";
   if (title.length > 200) title = title.slice(0, 200);
 
+  const status = String(body.status ?? "public");
+  if (!["public", "private", "inactive"].includes(status)) {
+    return NextResponse.json({ error: "Statut invalide" }, { status: 400 });
+  }
+  let password: string | null = null;
+  if (status === "private") {
+    password = String(body.password ?? "").trim();
+    if (!password) {
+      return NextResponse.json(
+        { error: "Un mot de passe est requis pour un module privé." },
+        { status: 400 },
+      );
+    }
+    if (password.length > 200) password = password.slice(0, 200);
+  }
+  const tool = body.tool ? String(body.tool).slice(0, 40) : null;
+
   const storagePrefix = `users/${user.id}/modules/${moduleId}/`;
 
   // Insertion avec quelques tentatives en cas de collision de share_id.
@@ -70,6 +87,9 @@ export async function POST(request: Request) {
       size_bytes: sizeBytes,
       storage_prefix: storagePrefix,
       share_id: shareId,
+      status,
+      password,
+      tool,
     });
     if (!error) {
       inserted = true;
