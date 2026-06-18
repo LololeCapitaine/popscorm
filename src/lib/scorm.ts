@@ -144,3 +144,32 @@ export function analyzeScorm(
     .trim();
   return { version, entryPath, title, manifestDir: dir };
 }
+
+/**
+ * Devine l'outil-auteur à partir de signatures dans le paquet.
+ * Heuristique (non garantie à 100 %) → la valeur reste modifiable côté UI.
+ * `relPaths` : chemins relatifs au dossier du manifeste.
+ */
+export function detectTool(
+  relPaths: string[],
+  manifestXml = "",
+  entryContent = "",
+): "Storyline" | "Rise" | "Genially" | null {
+  const paths = relPaths.map((p) => p.toLowerCase());
+  const has = (re: RegExp) => paths.some((p) => re.test(p));
+
+  // Articulate Storyline
+  if (has(/(^|\/)story\.html$/) || has(/(^|\/)story_content\//)) {
+    return "Storyline";
+  }
+  // Articulate Rise
+  if (has(/(^|\/)scormcontent\//) || has(/(^|\/)lib\/[^/]*\.bundle\.js$/)) {
+    return "Rise";
+  }
+  // Genially
+  const blob = `${manifestXml} ${entryContent}`.toLowerCase();
+  if (has(/genially/) || /genial\.ly|genially/.test(blob)) {
+    return "Genially";
+  }
+  return null;
+}

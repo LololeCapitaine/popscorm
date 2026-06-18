@@ -3,7 +3,12 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { unzip } from "fflate";
-import { analyzeScorm, detectManifestPath, type ScormInfo } from "@/lib/scorm";
+import {
+  analyzeScorm,
+  detectManifestPath,
+  detectTool,
+  type ScormInfo,
+} from "@/lib/scorm";
 import { formatBytes } from "@/lib/format";
 import { Logo } from "@/components/logo";
 import { Icon } from "@/components/icon";
@@ -65,12 +70,28 @@ interface PendingUpload {
   totalBytes: number;
 }
 
+const TOOL_OPTIONS = ["Storyline", "Rise", "Genially", "Autre"] as const;
+
+function toolBoxColor(tool: string | null): string {
+  switch ((tool ?? "").toLowerCase()) {
+    case "storyline":
+      return "bg-brand-500";
+    case "rise":
+      return "bg-ink";
+    case "genially":
+      return "bg-amber-500";
+    default:
+      return "bg-taupe-light";
+  }
+}
+
 interface FormState {
   mode: "create" | "edit";
   moduleId?: string;
   title: string;
   status: Status;
   password: string;
+  tool: string;
   meta?: { version: string; size: number };
 }
 
@@ -203,6 +224,23 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
       const totalBytes = rooted.reduce((s, f) => s + f.bytes.byteLength, 0);
       pendingRef.current = { rooted, info, totalBytes };
 
+      // Détection de l'outil (lecture légère du fichier de lancement).
+      let entryContent = "";
+      const entryBytes = entries[dir + entryFile];
+      if (entryBytes && entryBytes.byteLength < 2_000_000) {
+        try {
+          entryContent = new TextDecoder().decode(entryBytes);
+        } catch {
+          /* ignore */
+        }
+      }
+      const tool =
+        detectTool(
+          rooted.map((f) => f.rel),
+          manifestXml,
+          entryContent,
+        ) ?? "Autre";
+
       setPhase("idle");
       if (fileRef.current) fileRef.current.value = "";
       setForm({
@@ -210,6 +248,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
         title: info.title?.trim() || file.name.replace(/\.zip$/i, ""),
         status: "public",
         password: "",
+        tool,
         meta: { version: info.version, size: totalBytes },
       });
     } catch (e) {
@@ -224,6 +263,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
     title: string;
     status: Status;
     password: string;
+    tool: string;
   }) {
     const pending = pendingRef.current;
     if (!pending) return;
@@ -286,6 +326,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
           sizeBytes: totalBytes,
           status: values.status,
           password: values.password,
+          tool: values.tool,
         }),
       });
       if (!commit.ok) {
@@ -458,7 +499,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                 onClick={deleteSelected}
                 className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white transition hover:bg-brand-700"
               >
-                <Icon name="delete" className="text-[18px]" /> Supprimer
+                <Icon name="delete" className="text-[20px]" /> Supprimer
               </button>
             </div>
           )}
@@ -515,18 +556,21 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                                 title: m.title,
                                 status: m.status,
                                 password: m.password ?? "",
+                                tool: m.tool ?? "Autre",
                               })
                             }
                             className="group flex items-center gap-3 text-left"
                           >
-                            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
+                            <span
+                              className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white ${toolBoxColor(m.tool)}`}
+                            >
                               <Icon
                                 name="school"
                                 className="text-[20px] group-hover:opacity-0"
                               />
                               <Icon
                                 name="edit"
-                                className="absolute text-[18px] opacity-0 group-hover:opacity-100"
+                                className="absolute text-[20px] opacity-0 group-hover:opacity-100"
                               />
                             </span>
                             <span className="min-w-0">
@@ -571,6 +615,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                                   title: m.title,
                                   status: m.status,
                                   password: m.password ?? "",
+                                  tool: m.tool ?? "Autre",
                                 })
                               }
                               title="Éditer"
@@ -639,6 +684,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                 title: values.title,
                 status: values.status,
                 password: values.password,
+                tool: values.tool,
               });
             }
           }}
@@ -720,11 +766,13 @@ function ModuleFormModal({
     title: string;
     status: Status;
     password: string;
+    tool: string;
   }) => Promise<void>;
 }) {
   const [title, setTitle] = useState(form.title);
   const [status, setStatus] = useState<Status>(form.status);
   const [password, setPassword] = useState(form.password);
+  const [tool, setTool] = useState(form.tool);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -737,7 +785,7 @@ function ModuleFormModal({
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ title: title.trim(), status, password });
+      await onSubmit({ title: title.trim(), status, password, tool });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur");
@@ -766,6 +814,21 @@ function ModuleFormModal({
             onChange={(e) => setTitle(e.target.value)}
             className="rounded-lg border border-cream-200 px-3 py-2 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Outil</span>
+          <select
+            value={tool}
+            onChange={(e) => setTool(e.target.value)}
+            className="rounded-lg border border-cream-200 px-3 py-2 outline-none transition focus:border-brand-400"
+          >
+            {TOOL_OPTIONS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className="flex flex-col gap-1 text-sm">
@@ -940,7 +1003,7 @@ function LinkModal({
         >
           <Icon
             name={copied ? "check" : "content_copy"}
-            className="text-[18px]"
+            className="text-[20px]"
           />
           {copied ? "Copié" : "Copier"}
         </button>
