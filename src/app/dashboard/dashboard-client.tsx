@@ -606,7 +606,9 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                     <th className="px-2 py-3 font-medium">Module</th>
                     <th className="px-2 py-3 font-medium">Outil</th>
                     <th className="px-2 py-3 font-medium">Statut</th>
-                    <th className="px-2 py-3 text-right font-medium">Actions</th>
+                    <th className="px-2 py-3 pr-5 text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -674,7 +676,7 @@ export function DashboardClient({ user, modules, used, limit }: Props) {
                             {st.label}
                           </span>
                         </td>
-                        <td className="px-2 py-3">
+                        <td className="px-2 py-3 pr-3">
                           <div className="flex items-center justify-end gap-1">
                             <a
                               href={`/v/${m.share_id}`}
